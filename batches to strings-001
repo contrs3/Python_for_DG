@@ -1,0 +1,15 @@
+import pandas as pd
+
+file_path = r'C:\Users\contrs3\OneDrive - Boston Scientific\Desktop\LotesAle.xlsx'
+
+# Read the XLSX file into a Pandas DataFrame
+df = pd.read_excel(file_path)
+
+# Convert 'Mfg_Order_Name' column to string type
+df['Mfg_Order_Name'] = df['Mfg_Order_Name'].astype(str)
+
+# Add "-001" to each unique value and print the list
+unique_values = df['Mfg_Order_Name'].unique()
+unique_values_with_suffix = [f'{value}-001' for value in unique_values]
+
+print(unique_values_with_suffix)
