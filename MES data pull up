@@ -1,0 +1,35 @@
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine.url import  URL
+import pandas as pd
+
+def run_query(sql: str, conn=False):
+    # connection setup
+    if not conn:
+        conn_url = URL.create("mssql+pymssql",
+                            username='BSCI\\BSCI-SWAUTO-SVC',
+                            password='B0ston123',
+                            host='132.189.107.223\prod',
+                            database='MESMonthly_STP'
+                            )
+        conn = create_engine(conn_url)
+    df = pd.read_sql(sql=sql, con=conn)
+    if not conn:
+        conn.close()
+    return df
+
+containers = [ '101781625','101714581']
+
+def connections(batch_list: list):
+    query = f'''
+    SELECT * 
+FROM MES.tblContainerStatus cs
+WHERE cs.CONTAINERNAME in {tuple(batch_list)}
+       '''
+    return query
+
+df = run_query(connections(containers))
+
+csv_path = r'C:\Python\impedance.csv'
+df.to_csv(csv_path, index=False)
+
+print(f"DataFrame saved as CSV at path: {csv_path}")
