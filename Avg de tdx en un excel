@@ -1,0 +1,10 @@
+import pandas as pd
+
+file_path = r'C:\Users\contrs3\OneDrive - Boston Scientific\Desktop\LotesAle.xlsx'
+
+# Read the XLSX file into a Pandas DataFrame
+df = pd.read_excel(file_path)
+
+df['Mfg_Order_Name'] = df['Mfg_Order_Name'].astype(str)
+
+print(list(df['Mfg_Order_Name'].unique()))
