@@ -1,0 +1,14 @@
+import pandas as pd
+
+# Lee el archivo Excel
+excel_file = r'C:\Users\contrs3\OneDrive - Boston Scientific\Desktop\impah.xlsx'  # Cambia esto a la ruta de tu archivo
+data = pd.read_excel(excel_file)
+
+# Calcula el promedio de valores de impedancia por lote
+promedios_por_lote = data.groupby('Lote').mean().reset_index()  # Agrega reset_index para mantener 'Lote' como columna
+
+csv_path = r'C:\Python\impedance_ah.csv'
+promedios_por_lote.to_csv(csv_path, index=False)
+
+print(f"DataFrame saved as CSV at path: {csv_path}")
+
