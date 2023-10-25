@@ -1,13 +1,13 @@
 from sqlalchemy import create_engine, text
 import pandas as pd
 
-
-ic_batch_list = []
+#incluya los lotes de interes en formato str
+ic_batch_list = ['32665016-001', '32665019-001']
 conn_string = 'postgresql://Data_Science_User:Data4use@crdwh.cnhh4zmfsfrl.us-east-1.rds.amazonaws.com/crdwh'
 db = create_engine(conn_string)
 conn = db.connect()
 sql_imp = f"""
-select * from "EquipmentIntegration"."Impedance_Summary"
+select * from "EquipmentIntegration"."PulseEcho_Summary"
 WHERE "Batch_Id" in {tuple(ic_batch_list)}
 --WHERE "Txn_Date" >= '2023-01-01'
 --WHERE "Txn_Date" >= current_date - interval '10' day
@@ -15,7 +15,8 @@ WHERE "Batch_Id" in {tuple(ic_batch_list)}
 imp_df = pd.read_sql_query(text(sql_imp), con=conn)
 conn.close()
 
-csv_path = r'C:\Python\impedance.csv'
+#Path de donde se guardara el archivo generado
+csv_path = r'C:\Users\contrs3\OneDrive - Boston Scientific\Desktop\impedance4.csv'
 imp_df.to_csv(csv_path, index=False)
 
 print(f"DataFrame saved as CSV at path: {csv_path}")
