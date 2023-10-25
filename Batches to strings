@@ -1,5 +1,6 @@
 import pandas as pd
 
+#Ubicacion del file que va a leer
 file_path = r'C:\Users\contrs3\OneDrive - Boston Scientific\Desktop\LotesAle.xlsx'
 
 # Read the XLSX file into a Pandas DataFrame
