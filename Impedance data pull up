@@ -7,7 +7,7 @@ conn_string = 'postgresql://Data_Science_User:Data4use@crdwh.cnhh4zmfsfrl.us-eas
 db = create_engine(conn_string)
 conn = db.connect()
 sql_imp = f"""
-select * from "EquipmentIntegration"."PulseEcho_Summary"
+select * from "EquipmentIntegration"."Impedance_Summary"
 WHERE "Batch_Id" in {tuple(ic_batch_list)}
 --WHERE "Txn_Date" >= '2023-01-01'
 --WHERE "Txn_Date" >= current_date - interval '10' day
