@@ -1,0 +1,60 @@
+import pandas as pd
+import numpy as np
+
+# File path to the Excel file
+file_path = r'C:\Users\contrs3\OneDrive - Boston Scientific\Desktop\Book5.xlsx'
+
+# Read the Excel file into a Pandas DataFrame
+df = pd.read_excel(file_path)
+
+# Remove double quotes from specific columns
+df['time_in.data_value'] = df['time_in.data_value'].str.replace('"', '')
+df['time_out.data_value'] = df['time_out.data_value'].str.replace('"', '')
+
+# Clean 'ah_pr.start_time' column
+df['cleaned_start_time'] = df['ah_pr.start_time'].str.replace('"', '')
+df['cleaned_start_time'] = df['cleaned_start_time'].str.split('T').str[0]
+
+# Clean 'pes.start_time' column
+df['cleaned_pes_start_time'] = df['pes.start_time'].str.replace('"', '')
+df['cleaned_pes_start_time'] = df['cleaned_pes_start_time'].str.split('T').str[0]
+
+df['cleaned_pes_start_time'] = pd.to_datetime(df['cleaned_pes_start_time'])
+
+# Obtén el número de semana del año para cada fecha
+df['Week'] = df['cleaned_pes_start_time'].dt.isocalendar().week
+
+# Groupby and transformation operations
+df['total_tdx_imp'] = df.groupby('t.batch_id')['pes.start_qty'].transform('sum')
+df['total_rm_fails'] = df.groupby('t.batch_id')['ic.iv93_scrap_count'].transform('sum')
+df['total_tdx_used'] = df.groupby('t.batch_id')['strt.start_qty'].transform('sum')
+df['final_conf_qty'] = df.groupby('t.batch_id')['dhr.start_qty'].transform('sum')
+
+# Calculate rm yield
+df['rm_yield_ic'] = (1 - df['ic.iv93_scrap_count'] / df['pes.start_qty'])
+
+# Calculate electric yield
+df['electric_yield'] = (df['pes.finish_qty'] / df['pes.start_qty'])
+
+# Calculate overall yield
+df['overall_yield'] = (df['dhr.start_qty'] / df['strt.start_qty'])
+
+# Create a new column 'family' based on 'ic.material_id'
+df['family'] = np.where(df['ic.material_id'] == '"51146745-01"', '5F',
+                        np.where(df['ic.material_id'] == '"51146821-01"', '6F', None))
+
+# Round the 'rm_yield' column to 2 decimal places
+df['rm_yield_ic'] = round(df['rm_yield_ic'], 2)
+df['electric_yield'] = round(df['electric_yield'], 2)
+df['overall_yield'] = round(df['overall_yield'], 2)
+
+# Print and save the resulting DataFrame
+print(df)
+
+# File path to save the CSV file
+csv_path = r'C:\Python\aprmtd.csv'
+
+# Save DataFrame as CSV
+df.to_csv(csv_path, index=False, float_format='%.2f')
+
+print(f"DataFrame saved as CSV at path: {csv_path}")
