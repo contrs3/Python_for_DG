@@ -1,0 +1,327 @@
+import pandas as pd
+from openpyxl import Workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.chart import BarChart, Reference
+import numpy as np
+from openpyxl.chart.label import DataLabelList
+
+
+# File path to the Excel file
+file_path = r'C:\Users\contrs3\OneDrive - Boston Scientific\Desktop\Book5.xlsx'
+
+# Read the Excel file into a Pandas DataFrame
+df = pd.read_excel(file_path)
+
+# Remove double quotes from specific columns
+df['time_in.data_value'] = df['time_in.data_value'].str.replace('"', '')
+df['time_out.data_value'] = df['time_out.data_value'].str.replace('"', '')
+
+# Clean 'ah_pr.start_time' column
+df['cleaned_start_time'] = df['ah_pr.start_time'].str.replace('"', '')
+df['cleaned_start_time'] = df['cleaned_start_time'].str.split('T').str[0]
+
+# Clean 'pes.start_time' column
+df['cleaned_pes_start_time'] = df['pes.start_time'].str.replace('"', '')
+df['cleaned_pes_start_time'] = df['cleaned_pes_start_time'].str.split('T').str[0]
+
+df['cleaned_pes_start_time'] = pd.to_datetime(df['cleaned_pes_start_time'])
+
+# Obtén el número de semana del año para cada fecha
+df['Week'] = df['cleaned_pes_start_time'].dt.isocalendar().week
+df['Month'] = df['cleaned_pes_start_time'].dt.month
+
+# Groupby and transformation operations
+df['total_tdx_imp'] = df.groupby('t.batch_id')['pes.start_qty'].transform('sum')
+df['total_rm_fails'] = df.groupby('t.batch_id')['ic.iv93_scrap_count'].transform('sum')
+df['total_tdx_used'] = df.groupby('t.batch_id')['strt.start_qty'].transform('sum')
+df['final_conf_qty'] = df.groupby('t.batch_id')['dhr.start_qty'].transform('sum')
+
+# Calculate rm yield
+df['rm_yield_ic'] = (1 - df['ic.iv93_scrap_count'] / df['pes.start_qty'])
+
+# Calculate electric yield
+df['electric_yield'] = (df['pes.finish_qty'] / df['pes.start_qty'])
+
+# Calculate overall yield
+df['overall_yield'] = (df['dhr.start_qty'] / df['strt.start_qty'])
+
+# Create a new column 'family' based on 'ic.material_id'
+df['family'] = np.where(df['ic.material_id'] == '"51146745-01"', '5F',
+                        np.where(df['ic.material_id'] == '"51146821-01"', '6F', None))
+
+# Round the 'rm_yield' column to 2 decimal places
+df['rm_yield_ic'] = round(df['rm_yield_ic'], 2)
+df['electric_yield'] = round(df['electric_yield'], 2)
+df['overall_yield'] = round(df['overall_yield'], 2)
+
+# Print and save the resulting DataFrame
+print(df)
+
+# File path to save the CSV file
+csv_path = r'C:\Python\aprmtd.csv'
+
+# Save DataFrame as CSV
+df.to_csv(csv_path, index=False, float_format='%.2f')
+
+print(f"DataFrame saved as CSV at path: {csv_path}")
+
+# Create a new Excel workbook
+wb = Workbook()
+ws1 = wb.active
+
+# Write DataFrame to the first sheet of the workbook
+for r in dataframe_to_rows(df, index=False, header=True):
+    ws1.append(r)
+
+# Filtrar los datos del DataFrame por tipo de familia
+df_5F = df[df['family'] == '5F']
+df_6F = df[df['family'] == '6F']
+
+# Crear una nueva hoja para los datos de la familia 6F
+ws2 = wb.create_sheet(title="Rm weekly yield")
+# Groupby y operaciones de transformación
+avg_rm_yield_5F = df_5F.groupby('Week')['rm_yield_ic'].mean().reset_index()
+avg_rm_yield_6F = df_6F.groupby('Week')['rm_yield_ic'].mean().reset_index()
+
+
+# Escribir los datos de promedio de la familia 5F en la primera hoja
+for r in dataframe_to_rows(avg_rm_yield_5F, index=False, header=True):
+    ws2.append([round(val, 2) if isinstance(val, float) else val for val in r])
+
+# Escribir los datos de promedio de la familia 6F en la segunda hoja
+for r_idx, row in enumerate(dataframe_to_rows(avg_rm_yield_6F, index=False, header=True), start=1):
+    ws2.cell(row=r_idx, column=3).value = ''
+    for c_idx, value in enumerate(row, start=3):
+        ws2.cell(row=r_idx, column=c_idx).value = round(value, 2) if isinstance(value, float) else value
+
+
+
+# Crear los gráficos para ambas familias
+chart_5F = BarChart()
+chart_5F.title = "Average RM Yield IC by Week for 5F"
+chart_5F.x_axis.title = "Week"
+chart_5F.y_axis.title = "Average RM Yield IC"
+
+# Multiplica los valores por 100 para convertirlos en porcentaje
+data_5F_values = [val * 100 for val in avg_rm_yield_5F['rm_yield_ic']]
+data_5F = Reference(ws2, min_col=2, min_row=1, max_row=len(avg_rm_yield_5F) + 1, max_col=2)
+categories_5F = Reference(ws2, min_col=1, min_row=2, max_row=len(avg_rm_yield_5F) + 1)
+chart_5F.add_data(data_5F, titles_from_data=True)
+chart_5F.set_categories(categories_5F)
+
+# Agregar etiquetas de datos en porcentaje
+data_labels_5F = DataLabelList()
+data_labels_5F.showVal = True
+data_labels_5F.showPercent = True
+chart_5F.dLbls = data_labels_5F
+
+chart_5F.y_axis.majorGridlines = None
+
+ws2.add_chart(chart_5F, "E1")
+
+# Repite lo mismo para el gráfico de la familia 6F
+chart_6F = BarChart()
+chart_6F.title = "Average RM Yield IC by Week for 6F"
+chart_6F.x_axis.title = "Week"
+chart_6F.y_axis.title = "Average RM Yield IC"
+
+# Multiplica los valores por 100 para convertirlos en porcentaje
+data_6F_values = [val * 100 for val in avg_rm_yield_6F['rm_yield_ic']]
+data_6F = Reference(ws2, min_col=4, min_row=1, max_row=len(avg_rm_yield_6F) + 1, max_col=4)
+categories_6F = Reference(ws2, min_col=3, min_row=2, max_row=len(avg_rm_yield_6F) + 1)
+chart_6F.add_data(data_6F, titles_from_data=True)
+chart_6F.set_categories(categories_6F)
+
+# Agregar etiquetas de datos en porcentaje
+data_labels_6F = DataLabelList()
+data_labels_6F.showVal = True
+data_labels_6F.showPercent = True
+chart_6F.dLbls = data_labels_6F
+
+chart_6F.y_axis.majorGridlines = None
+
+ws2.add_chart(chart_6F, "E15")
+
+
+# Crear una nueva hoja para los datos de la familia 6F basada en electric_yield
+ws3 = wb.create_sheet(title="Electric weekly yield")
+
+# Groupby y operaciones de transformación
+avg_electric_yield_5F = df_5F.groupby('Week')['electric_yield'].mean().reset_index()
+avg_electric_yield_6F = df_6F.groupby('Week')['electric_yield'].mean().reset_index()
+
+# Escribir los datos de promedio de la familia 5F en la tercera hoja
+for r in dataframe_to_rows(avg_electric_yield_5F, index=False, header=True):
+    ws3.append([round(val, 2) if isinstance(val, float) else val for val in r])
+
+# Escribir los datos de promedio de la familia 6F en la tercera hoja
+for r_idx, row in enumerate(dataframe_to_rows(avg_electric_yield_6F, index=False, header=True), start=1):
+    ws3.cell(row=r_idx, column=3).value = ''
+    for c_idx, value in enumerate(row, start=3):
+        ws3.cell(row=r_idx, column=c_idx).value = round(value, 2) if isinstance(value, float) else value
+
+# Crear los gráficos para ambas familias
+chart_5F_electric = BarChart()
+chart_5F_electric.title = "Average Electric Yield by Week for 5F"
+chart_5F_electric.x_axis.title = "Week"
+chart_5F_electric.y_axis.title = "Average Electric Yield"
+
+# Multiplica los valores por 100 para convertirlos en porcentaje
+data_5F_electric_values = [val * 100 for val in avg_electric_yield_5F['electric_yield']]
+data_5F_electric = Reference(ws3, min_col=2, min_row=1, max_row=len(avg_electric_yield_5F) + 1, max_col=2)
+categories_5F_electric = Reference(ws3, min_col=1, min_row=2, max_row=len(avg_electric_yield_5F) + 1)
+chart_5F_electric.add_data(data_5F_electric, titles_from_data=True)
+chart_5F_electric.set_categories(categories_5F_electric)
+
+# Agregar etiquetas de datos en porcentaje
+data_labels_5F_electric = DataLabelList()
+data_labels_5F_electric.showVal = True
+data_labels_5F_electric.showPercent = True
+chart_5F_electric.dLbls = data_labels_5F_electric
+chart_5F_electric.y_axis.majorGridlines = None
+
+ws3.add_chart(chart_5F_electric, "E1")
+
+# Repite lo mismo para el gráfico de la familia 6F basado en electric_yield
+chart_6F_electric = BarChart()
+chart_6F_electric.title = "Average Electric Yield by Week for 6F"
+chart_6F_electric.x_axis.title = "Week"
+chart_6F_electric.y_axis.title = "Average Electric Yield"
+
+# Multiplica los valores por 100 para convertirlos en porcentaje
+data_6F_electric_values = [val * 100 for val in avg_electric_yield_6F['electric_yield']]
+data_6F_electric = Reference(ws3, min_col=4, min_row=1, max_row=len(avg_electric_yield_6F) + 1, max_col=4)
+categories_6F_electric = Reference(ws3, min_col=3, min_row=2, max_row=len(avg_electric_yield_6F) + 1)
+chart_6F_electric.add_data(data_6F_electric, titles_from_data=True)
+chart_6F_electric.set_categories(categories_6F_electric)
+
+# Agregar etiquetas de datos en porcentaje
+data_labels_6F_electric = DataLabelList()
+data_labels_6F_electric.showVal = True
+data_labels_6F_electric.showPercent = True
+chart_6F_electric.dLbls = data_labels_6F_electric
+chart_6F_electric.y_axis.majorGridlines = None
+
+ws3.add_chart(chart_6F_electric, "E15")
+
+# Crear una nueva hoja para los datos de la familia 6F basada en overall_yield
+ws4 = wb.create_sheet(title="Overall weekly yield")
+
+# Groupby y operaciones de transformación
+avg_overall_yield_5F = df_5F.groupby('Week')['overall_yield'].mean().reset_index()
+avg_overall_yield_6F = df_6F.groupby('Week')['overall_yield'].mean().reset_index()
+
+# Escribir los datos de promedio de la familia 5F en la cuarta hoja
+for r in dataframe_to_rows(avg_overall_yield_5F, index=False, header=True):
+    ws4.append([round(val, 2) if isinstance(val, float) else val for val in r])
+
+# Escribir los datos de promedio de la familia 6F en la cuarta hoja
+for r_idx, row in enumerate(dataframe_to_rows(avg_overall_yield_6F, index=False, header=True), start=1):
+    ws4.cell(row=r_idx, column=3).value = ''
+    for c_idx, value in enumerate(row, start=3):
+        ws4.cell(row=r_idx, column=c_idx).value = round(value, 2) if isinstance(value, float) else value
+
+# Crear los gráficos para ambas familias
+chart_5F_overall = BarChart()
+chart_5F_overall.title = "Average Overall Yield by Week for 5F"
+chart_5F_overall.x_axis.title = "Week"
+chart_5F_overall.y_axis.title = "Average Overall Yield"
+
+# Multiplica los valores por 100 para convertirlos en porcentaje
+data_5F_overall_values = [val * 100 for val in avg_overall_yield_5F['overall_yield']]
+data_5F_overall = Reference(ws4, min_col=2, min_row=1, max_row=len(avg_overall_yield_5F) + 1, max_col=2)
+categories_5F_overall = Reference(ws4, min_col=1, min_row=2, max_row=len(avg_overall_yield_5F) + 1)
+chart_5F_overall.add_data(data_5F_overall, titles_from_data=True)
+chart_5F_overall.set_categories(categories_5F_overall)
+
+# Agregar etiquetas de datos en porcentaje
+data_labels_5F_overall = DataLabelList()
+data_labels_5F_overall.showVal = True
+data_labels_5F_overall.showPercent = True
+chart_5F_overall.dLbls = data_labels_5F_overall
+chart_5F_overall.y_axis.majorGridlines = None
+
+ws4.add_chart(chart_5F_overall, "E1")
+
+# Repite lo mismo para el gráfico de la familia 6F basada en overall_yield
+chart_6F_overall = BarChart()
+chart_6F_overall.title = "Average Overall Yield by Week for 6F"
+chart_6F_overall.x_axis.title = "Week"
+chart_6F_overall.y_axis.title = "Average Overall Yield"
+
+# Multiplica los valores por 100 para convertirlos en porcentaje
+data_6F_overall_values = [val * 100 for val in avg_overall_yield_6F['overall_yield']]
+data_6F_overall = Reference(ws4, min_col=4, min_row=1, max_row=len(avg_overall_yield_6F) + 1, max_col=4)
+categories_6F_overall = Reference(ws4, min_col=3, min_row=2, max_row=len(avg_overall_yield_6F) + 1)
+chart_6F_overall.add_data(data_6F_overall, titles_from_data=True)
+chart_6F_overall.set_categories(categories_6F_overall)
+
+# Agregar etiquetas de datos en porcentaje
+data_labels_6F_overall = DataLabelList()
+data_labels_6F_overall.showVal = True
+data_labels_6F_overall.showPercent = True
+chart_6F_overall.dLbls = data_labels_6F_overall
+chart_6F_overall.y_axis.majorGridlines = None
+
+ws4.add_chart(chart_6F_overall, "E15")
+
+# Filtrar los datos del DataFrame por tipo de familia
+df_5F_monthly = df[df['family'] == '5F'].groupby('Month')['rm_yield_ic'].mean().reset_index()
+df_6F_monthly = df[df['family'] == '6F'].groupby('Month')['rm_yield_ic'].mean().reset_index()
+
+# Crear una nueva hoja para los datos del rendimiento RM agrupados por mes
+ws5 = wb.create_sheet(title="RM yield monthly")
+
+# Escribir los datos de rendimiento RM promedio para la familia 5F en la nueva hoja
+for r in dataframe_to_rows(df_5F_monthly, index=False, header=True):
+    ws5.append([round(val, 2) if isinstance(val, float) else val for val in r])
+
+# Escribir los datos de rendimiento RM promedio para la familia 6F en la nueva hoja
+for r_idx, row in enumerate(dataframe_to_rows(df_6F_monthly, index=False, header=True), start=1):
+    ws5.cell(row=r_idx, column=3).value = ''
+    for c_idx, value in enumerate(row, start=3):
+        ws5.cell(row=r_idx, column=c_idx).value = round(value, 2) if isinstance(value, float) else value
+
+# Crear el gráfico para el rendimiento RM promedio por mes para la familia 5F
+chart_5F_monthly = BarChart()
+chart_5F_monthly.title = "Average RM Yield by Month for 5F"
+chart_5F_monthly.x_axis.title = "Month"
+chart_5F_monthly.y_axis.title = "Average RM Yield"
+
+data_5F_monthly = Reference(ws5, min_col=2, min_row=1, max_row=len(df_5F_monthly) + 1, max_col=2)
+categories_5F_monthly = Reference(ws5, min_col=1, min_row=2, max_row=len(df_5F_monthly) + 1)
+chart_5F_monthly.add_data(data_5F_monthly, titles_from_data=True)
+
+# Agregar data labels
+data_labels_5F_monthly = DataLabelList()
+data_labels_5F_monthly.showVal = True
+chart_5F_monthly.dataLabels = data_labels_5F_monthly
+
+chart_5F_monthly.set_categories(categories_5F_monthly)
+ws5.add_chart(chart_5F_monthly, "E1")
+
+# Crear el gráfico para el rendimiento RM promedio por mes para la familia 6F
+chart_6F_monthly = BarChart()
+chart_6F_monthly.title = "Average RM Yield by Month for 6F"
+chart_6F_monthly.x_axis.title = "Month"
+chart_6F_monthly.y_axis.title = "Average RM Yield"
+
+data_6F_monthly = Reference(ws5, min_col=4, min_row=1, max_row=len(df_6F_monthly) + 1, max_col=4)
+categories_6F_monthly = Reference(ws5, min_col=3, min_row=2, max_row=len(df_6F_monthly) + 1)
+chart_6F_monthly.add_data(data_6F_monthly, titles_from_data=True)
+
+# Agregar data labels
+data_labels_6F_monthly = DataLabelList()
+data_labels_6F_monthly.showVal = True
+chart_6F_monthly.dataLabels = data_labels_6F_monthly
+
+chart_6F_monthly.set_categories(categories_6F_monthly)
+ws5.add_chart(chart_6F_monthly, "E15")
+
+
+# Guardar el archivo Excel
+excel_path = r'C:\Python\testinggt7.xlsx'
+wb.save(excel_path)
+
+print(f"Excel workbook saved at path: {excel_path}")
+
